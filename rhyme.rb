@@ -58,8 +58,8 @@ module Rhyme
 			@mapper.each_pair { |k,p|
 				if match = p[:re].match(scope.request.path_info)
 					values = match.captures
-					p k
-					p values
+				#	p k
+				#	p values
 					p[:variants].each { |v|
 						if conditions? scope, v[:conditions]
 							blk = v[:block]
