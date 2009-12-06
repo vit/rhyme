@@ -16,7 +16,7 @@ module Rhyme
 			}.gsub( /(\*)|(:\w+)/ ) { |c|
 				if ?* === c
 					names << '*'
-					'(.+)'
+					'(.*?)'
 				else
 					names << c[1..-1]
 					'(\w+)'
@@ -33,22 +33,21 @@ module Rhyme
 		end
 		def forward path='/', target, &block
 			any path+'*' do
-				pi_new = '/qwqwrqwtqerw' # Надо поставить сюда параметр из *
 				pi_prev = @request.path_info
-				@request.path_info = pi_new
-				result = target.call(self)
+				@request.path_info = @request.path_info[path.length..pi_prev.length]
+				result = target.call_ext(self)
 				@request.path_info = pi_prev
 				result
 			end
 		end
 		def conditions? scope, cond = {}
 			-> c, m {
-				c.nil? || c.is_a?(Array) ? c.include?(m) : c == m
+				c.nil? || ( c.is_a?(Array) ? c.include?(m) : c == m )
 			}[ cond[:method], scope.request.request_method ]
 		end
 		def call env
 			s = Scope.new
-			s.request = Rack::Request.new(env)
+			s.request = Rack::Request.new env
 			s.response = Rack::Response.new
 			call_ext s
 			s.response.finish
@@ -58,8 +57,6 @@ module Rhyme
 			@mapper.each_pair { |k,p|
 				if match = p[:re].match(scope.request.path_info)
 					values = match.captures
-				#	p k
-				#	p values
 					p[:variants].each { |v|
 						if conditions? scope, v[:conditions]
 							blk = v[:block]
@@ -72,6 +69,7 @@ module Rhyme
 				scope.response.body = scope.instance_eval &blk
 			else
 				scope.response.status = 404
+				scope.response.body = 'not found'
 			end
 		end
 	end
