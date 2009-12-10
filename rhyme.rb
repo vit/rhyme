@@ -1,7 +1,15 @@
+%w[rack].each {|r| require r}
 
 module Rhyme
 	class Scope
 		attr_accessor :request, :response
+	end
+	class Request < Rack::Request
+		attr_accessor :languages
+		def initialize env
+			@languages=env['HTTP_ACCEPT_LANGUAGE'].split(?,).map{ |s| s.split(?;) }.map{ |a| a.empty? ? nil : a.first.to_s.strip }.select{ |s| not (s.nil? or s.empty?) }
+			super env
+		end
 	end
 	class Router
 		def initialize &block
@@ -26,8 +34,8 @@ module Rhyme
 			@mapper[path][:variants] << {conditions: {}.merge(cond), argnames: names, block: block}
 		end
 		alias_method :any, :add_path
-		{get: ['GET', 'HEAD'], head: 'HEAD', post: 'POST', put: 'PUT', delete: 'DELETE'}.each_pair do |method, conditions|
-			define_method method do | path='/', cond={}, &block |
+		{get: ['GET', 'HEAD'], head: 'HEAD', post: 'POST', put: 'PUT', delete: 'DELETE'}.each_pair do |reqmethod, conditions|
+			define_method reqmethod do | path='/', cond={}, &block |
 				any path, cond.merge( {method: conditions} ), &block
 			end
 		end
@@ -47,7 +55,7 @@ module Rhyme
 		end
 		def call env
 			s = Scope.new
-			s.request = Rack::Request.new env
+			s.request = Request.new env
 			s.response = Rack::Response.new
 			call_ext s
 			s.response.finish
