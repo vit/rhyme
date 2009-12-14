@@ -19,7 +19,6 @@ module Rhyme
 		def initialize &block
 			@mapper = {}
 			instance_eval &block if block
-			super
 		end
 		def add_path path='/', cond={}, &block
 			names = []
@@ -68,7 +67,7 @@ module Rhyme
 				not @mapper.each_pair { |k,p|
 					return true if -> match {
 						match && -> v {
-							scope.instance_exec( v[:argnames], match.captures, &v[:block] ) if v
+							v && scope.instance_exec( v[:argnames], match.captures, &v[:block] )
 							not v.nil?
 						}[ p[:variants].select { |v| conditions?( scope, v[:conditions] ) && v[:block] }.first ]
 					}[ p[:re].match( scope.request.path_info ) ]
