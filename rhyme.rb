@@ -3,6 +3,10 @@
 module Rhyme
 	class Scope
 		attr_accessor :request, :response
+		def initialize env
+			@request = Request.new env
+			@response = Rack::Response.new
+		end
 	end
 	class Request < Rack::Request
 		attr_accessor :languages
@@ -27,7 +31,7 @@ module Rhyme
 					'(.*?)'
 				else
 					names << c[1..-1]
-					'(\w+)'
+					'(\w*)'
 				end
 			}
 			@mapper[path] ||= {re: Regexp.new( ?^ + path + ?$ ), variants: [] }
@@ -36,16 +40,18 @@ module Rhyme
 		alias_method :any, :add_path
 		{get: ['GET', 'HEAD'], head: 'HEAD', post: 'POST', put: 'PUT', delete: 'DELETE'}.each_pair do |reqmethod, conditions|
 			define_method reqmethod do | path='/', cond={}, &block |
-				any path, cond.merge( {method: conditions} ), &block
+				any path, cond.merge( {method: conditions} ), & -> argnames, values {
+					@params = argnames.zip(values).inject({}) { |a,v| a[ v[0] ] = v[1]; a }
+					@response.body = instance_exec( *values, &block )
+				}
 			end
 		end
 		def forward path='/', target, &block
 			any path+'*' do
 				pi_prev = @request.path_info
-				@request.path_info = @request.path_info[path.length..pi_prev.length]
-				result = target.call_ext(self)
+				@request.path_info = @request.path_info[path.length .. pi_prev.length]
+				target.call_with_scope( self )
 				@request.path_info = pi_prev
-				result
 			end
 		end
 		def conditions? scope, cond = {}
@@ -54,31 +60,20 @@ module Rhyme
 			}[ cond[:method], scope.request.request_method ]
 		end
 		def call env
-			s = Scope.new
-			s.request = Request.new env
-			s.response = Rack::Response.new
-			call_ext s
+			call_with_scope (s = Scope.new( env ))
 			s.response.finish
 		end
-		def call_ext scope
-			blk = nil
-			@mapper.each_pair { |k,p|
-				if match = p[:re].match(scope.request.path_info)
-					values = match.captures
-					p[:variants].each { |v|
-						if conditions? scope, v[:conditions]
-							blk = v[:block]
-							break
-						end
-					}
-				end
-			}
-			if blk
-				scope.response.body = scope.instance_eval &blk
-			else
-				scope.response.status = 404
-				scope.response.body = 'not found'
-			end
+		def call_with_scope scope
+			-> {
+				not @mapper.each_pair { |k,p|
+					return true if -> match {
+						match && -> v {
+							scope.instance_exec( v[:argnames], match.captures, &v[:block] ) if v
+							not v.nil?
+						}[ p[:variants].select { |v| conditions?( scope, v[:conditions] ) && v[:block] }.first ]
+					}[ p[:re].match( scope.request.path_info ) ]
+				}
+			}[] || -> r { r.status, r.body = 404, ['not found'] }[ scope.response ]
 		end
 	end
 end
