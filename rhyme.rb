@@ -41,7 +41,7 @@ module Rhyme
 			define_method reqmethod do | path='/', cond={}, &block |
 				any path, cond.merge( {method: conditions} ), & -> argnames, values {
 					@params = argnames.zip(values).inject({}) { |a,v| a[ v[0] ] = v[1]; a }
-					@response.body = instance_exec( *values, &block )
+					@response.body = [instance_exec( *values, &block )]
 				}
 			end
 		end
